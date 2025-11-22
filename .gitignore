@@ -10,3 +10,4 @@
 .snapshots/
 #Testing Output folder
 data/
+__pycache__/
