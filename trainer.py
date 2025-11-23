@@ -54,8 +54,11 @@ class Trainer:
             
             # Input lengths (all sequences have same length after padding)
             input_lengths = torch.full((videos.size(0),), outputs.size(0), dtype=torch.long)
-            
-            loss = self.ctc_loss(outputs, labels, input_lengths, label_lengths)
+        
+            if self.device.type == 'mps':
+                loss = self.ctc_loss(outputs.cpu(), labels.cpu(), input_lengths.cpu(), label_lengths.cpu())
+            else:
+                loss = self.ctc_loss(outputs, labels, input_lengths, label_lengths)
             
             # Backward pass
             self.optimizer.zero_grad()
@@ -100,7 +103,11 @@ class Trainer:
                 outputs = outputs.permute(1, 0, 2)
                 input_lengths = torch.full((videos.size(0),), outputs.size(0), dtype=torch.long)
                 
-                loss = self.ctc_loss(outputs, labels, input_lengths, label_lengths)
+                # Handle MPS limitation for CTC loss
+                if self.device.type == 'mps':
+                    loss = self.ctc_loss(outputs.cpu(), labels.cpu(), input_lengths.cpu(), label_lengths.cpu())
+                else:
+                    loss = self.ctc_loss(outputs, labels, input_lengths, label_lengths)
                 
                 total_loss += loss.item()
                 num_batches += 1
