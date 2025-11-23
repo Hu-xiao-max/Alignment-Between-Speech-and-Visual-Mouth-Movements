@@ -191,21 +191,22 @@ def check_data_structure(data_path):
     print(f"Found {len(items)} items in data directory:")
     
     # First, let's examine the structure of one directory in detail
-    for item in items[:3]:  # Check first 3 directories
+    for i, item in enumerate(items):
         item_path = os.path.join(data_path, item)
         if os.path.isdir(item_path):
-            print(f"\n  Examining: {item}/")
-            subdirs = os.listdir(item_path)
-            print(f"    Contents: {subdirs[:10]}")
-            
-            # Check what's inside this directory
-            for subdir in subdirs[:5]:
-                subdir_path = os.path.join(item_path, subdir)
-                if os.path.isdir(subdir_path):
-                    files = os.listdir(subdir_path)[:3]
-                    print(f"      {subdir}/: {files}")
-                elif subdir.endswith(('.mpg', '.mp4', '.avi', '.npy', '.txt', '.align')):
-                    print(f"      {subdir} (file)")
+            if i < 3:
+                print(f"\n  Examining: {item}/")
+                subdirs = os.listdir(item_path)
+                print(f"    Contents: {subdirs[:10]}")
+                
+                # Check what's inside this directory
+                for subdir in subdirs[:5]:
+                    subdir_path = os.path.join(item_path, subdir)
+                    if os.path.isdir(subdir_path):
+                        files = os.listdir(subdir_path)[:3]
+                        print(f"      {subdir}/: {files}")
+                    elif subdir.endswith(('.mpg', '.mp4', '.avi', '.npy', '.txt', '.align')):
+                        print(f"      {subdir} (file)")
             
             # Check for different possible structures
             # Structure 1: video/ and align/ subdirectories
@@ -219,15 +220,24 @@ def check_data_structure(data_path):
                          if f.endswith(('.txt', '.align'))]
             
             if os.path.exists(video_path) and os.path.exists(align_path):
-                num_videos = len([f for f in os.listdir(video_path) 
-                                if f.endswith(('.mpg', '.mp4', '.avi'))])
-                print(f"    ✓ Standard structure: video/ and align/ folders with {num_videos} videos")
+                if i < 3:
+                    num_videos = len([f for f in os.listdir(video_path) 
+                                    if f.endswith(('.mpg', '.mp4', '.avi'))])
+                    print(f"    ✓ Standard structure: video/ and align/ folders with {num_videos} videos")
+                speakers.append(item)
+            elif os.path.exists(align_path) and video_files:
+                # Structure 3: Videos in root, align in subfolder
+                if i < 3:
+                    num_aligns = len([f for f in os.listdir(align_path) if f.endswith(('.align', '.txt'))])
+                    print(f"Mixed structure: {len(video_files)} videos in root, {num_aligns} alignments in align/ folder")
                 speakers.append(item)
             elif video_files and text_files:
-                print(f"    ✓ Flat structure: {len(video_files)} video files, {len(text_files)} text files")
+                if i < 3:
+                    print(f"    ✓ Flat structure: {len(video_files)} video files, {len(text_files)} text files")
                 speakers.append(item)
             elif video_files:
-                print(f"    ⚠ Found {len(video_files)} video files but no text files")
+                if i < 3:
+                    print(f"    ⚠ Found {len(video_files)} video files but no text files")
     
     # Show all speaker directories found
     all_speaker_dirs = [d for d in items if os.path.isdir(os.path.join(data_path, d))]

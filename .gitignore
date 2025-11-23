@@ -11,3 +11,4 @@
 #Testing Output folder
 data/
 __pycache__/
+.DS_Store

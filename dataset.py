@@ -77,6 +77,23 @@ class GridDataset(Dataset):
                         if os.path.exists(potential_path):
                             samples.append((video_path, potential_path))
                             break
+            elif os.path.exists(align_dir):
+                video_formats = ['.mpg', '.mp4', '.avi', '.mov']
+                video_files = []
+                for fmt in video_formats:
+                    video_files.extend([f for f in os.listdir(speaker_path) if f.endswith(fmt)])
+                
+                for video_file in video_files:
+                    video_path = os.path.join(speaker_path, video_file)
+                    base_name = os.path.splitext(video_file)[0]
+                    
+                    # Check for different align file formats in align dir
+                    for ext in ['.align', '.txt']:
+                        potential_align = base_name + ext
+                        potential_path = os.path.join(align_dir, potential_align)
+                        if os.path.exists(potential_path):
+                            samples.append((video_path, potential_path))
+                            break
             else:
                 # Check for flat structure (processed data)
                 # Video files might be .npy (preprocessed) or original formats
