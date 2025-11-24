@@ -1,0 +1,17 @@
+# LipNet Training Requirements
+# 安装: pip install -r requirements.txt
+
+# 核心依赖
+tensorflow>=2.10.0
+numpy>=1.21.0
+opencv-python>=4.5.0
+matplotlib>=3.5.0
+scikit-learn>=1.0.0
+tqdm>=4.64.0
+
+# 可选：唇部检测（如果不安装dlib，将使用简单的区域裁剪）
+# dlib需要cmake和编译环境，可能需要单独安装：
+# pip install dlib --no-cache-dir --force-reinstall --no-build-isolation
+
+# 可选：用于更好的评估指标
+# editdistance>=0.6.0

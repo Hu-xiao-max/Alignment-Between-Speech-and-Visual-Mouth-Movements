@@ -10,3 +10,6 @@
 .snapshots/
 #Testing Output folder
 data/
+checkpoints/
+output/
+.claude/
