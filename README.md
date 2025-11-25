@@ -27,7 +27,7 @@ unzip in follow path：/home/alien/Code/Alignment-Between-Speech-and-Visual-Mout
 ## 安装依赖
   pip install -r requirements.txt
 
-  ### 下载 dlib 人脸特征点检测模型（optinoan）
+  ### 下载 dlib 人脸特征点检测模型（optional）
   wget https://github.com/italojs/facial-landmarks-recognition/raw/master/shape_predictor_68_face_landmarks.dat
 
   ### 训练模型
