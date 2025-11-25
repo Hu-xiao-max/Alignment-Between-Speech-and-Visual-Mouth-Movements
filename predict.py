@@ -16,8 +16,8 @@ print(f"Using device: {device}")
 
 def predict():
     """Load model and run predictions on test set"""
-    
-    model_path = 'lipnet_final.pth'
+
+    model_path = 'lipnet_checkpoint_epoch_10.pth'
     if not os.path.exists(model_path):
         print(f"Error: Model file '{model_path}' not found. Please run training first.")
         return

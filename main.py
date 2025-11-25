@@ -26,7 +26,7 @@ def main():
         'val_speakers': None,  # Will be set dynamically
         'test_speakers': None,  # Will be set dynamically
         'batch_size': 8,
-        'epochs': 2,  # Reduced for quick testing, increase to 50 for real training
+        'epochs': 20,
         'learning_rate': 1e-4,
         'img_width': 100,
         'img_height': 50,

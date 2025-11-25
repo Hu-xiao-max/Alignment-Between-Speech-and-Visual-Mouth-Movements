@@ -478,10 +478,12 @@ def CTCLoss(y_true, y_pred):
     """
     batch_size = tf.cast(tf.shape(y_true)[0], tf.int64)
     input_len = tf.cast(tf.shape(y_pred)[1], tf.int64)
-    label_len = tf.cast(tf.shape(y_true)[1], tf.int64)
+    
+    # FIX：correct label length by counting non-zero values
+    label_len = tf.math.count_nonzero(y_true, axis=1, dtype=tf.int64)
 
     input_len = input_len * tf.ones(shape=(batch_size, 1), dtype=tf.int64)
-    label_len = label_len * tf.ones(shape=(batch_size, 1), dtype=tf.int64)
+    label_len = tf.expand_dims(label_len, axis=1)
 
     loss = tf.keras.backend.ctc_batch_cost(y_true, y_pred, input_len, label_len)
 

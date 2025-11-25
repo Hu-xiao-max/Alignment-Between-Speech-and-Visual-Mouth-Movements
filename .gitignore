@@ -15,3 +15,5 @@ __pycache__/
 checkpoints/
 output/
 .claude/
+*.pth
+.pth
