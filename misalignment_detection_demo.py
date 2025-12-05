@@ -1,6 +1,6 @@
 """
 Misalignment Detection - Demo Generation Script
-用法: python misalignment_detection_demo.py --save_demo_dir demos --demo_shift_frames 10
+usage: python misalignment_detection_demo.py --save_demo_dir demos --demo_shift_frames 10
 """
 
 import argparse
