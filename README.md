@@ -32,20 +32,20 @@ unzip in follow path：Alignment-Between-Speech-and-Visual-Mouth-Movements/data/
 | `lipnet_final.pth` | PyTorch model weights produced by `trainer.py`. |
 | `README.md` | Project overview, setup instructions, and file descriptions (this document). |
 
-## 安装依赖
+## Install dependencies
   pip install -r requirements.txt
 
-  ### 下载 dlib 人脸特征点检测模型（optional）
+  ### download dlib dataset（optional）
   wget https://github.com/italojs/facial-landmarks-recognition/raw/master/shape_predictor_68_face_landmarks.dat
 
 
-### 训练模型
+### train model
 ./run_train.sh --mode train --epochs 100 --batch_size 8
 
-### 测试模型
+### test model
 ./run_train.sh  python train.py --mode test --checkpoint checkpoints/lipnet_best.keras
 
-  ### 单视频推理
+  ### single video inference
   ./run_train.sh python train.py --mode inference --checkpoint checkpoints/lipnet_best.keras --video ./data/s1_processed/bbaf2n.mpg
 
 ## Misalignment Detection Pipeline
