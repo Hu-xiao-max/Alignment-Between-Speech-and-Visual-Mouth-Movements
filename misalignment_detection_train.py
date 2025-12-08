@@ -1,6 +1,9 @@
+# Yunpei Gu
+# 2025-11-30
+# CS 7180 Advanced Perception
 """
 Misalignment Detection - Training Script
-用法: python misalignment_detection_train.py --max_samples 200 --epochs 20
+python misalignment_detection_train.py --max_samples 200 --epochs 20
 """
 
 import argparse
@@ -28,11 +31,13 @@ from model import LipNet
 
 class Logger:
     """Log to both file and optionally to console"""
+    # Initialize logger handle and target log file.
     def __init__(self, log_path: str, console: bool = False):
         self.log_path = log_path
         self.console = console
         self.file = open(log_path, 'w')
     
+    # Write a timestamped log line to disk/console.
     def log(self, message: str):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         line = f"[{timestamp}] {message}"
@@ -41,10 +46,12 @@ class Logger:
         if self.console:
             print(message)
     
+    # Close the file handle cleanly.
     def close(self):
         self.file.close()
 
 
+# Format seconds into a friendly string for logs.
 def format_time(seconds: float) -> str:
     """Format seconds into human readable string"""
     if seconds < 60:
@@ -60,6 +67,7 @@ def format_time(seconds: float) -> str:
         return f"{hours}h {mins}m {secs:.1f}s"
 
 
+# Ensure reproducibility across randomness sources.
 def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
@@ -68,6 +76,7 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
+# Choose best available compute device.
 def get_device() -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda")
@@ -88,6 +97,7 @@ class DetectorConfig:
     default_fps: float = 25.0
 
 
+# Read FPS metadata for a video, falling back when absent.
 def get_video_fps(video_path: str, fallback: float = 25.0) -> float:
     if video_path.endswith(".npy"):
         return fallback
@@ -97,6 +107,7 @@ def get_video_fps(video_path: str, fallback: float = 25.0) -> float:
     return fps if fps and fps > 1e-3 else fallback
 
 
+# Circularly shift audio by a number of frames to synthesize misalignment.
 def shift_audio(audio: np.ndarray, shift_frames: int, fps: float, sample_rate: int) -> np.ndarray:
     if shift_frames == 0:
         return audio.copy()
@@ -114,6 +125,7 @@ def shift_audio(audio: np.ndarray, shift_frames: int, fps: float, sample_rate: i
     return result
 
 
+# Compute MFCC-derived mean/std statistics for audio windows.
 def compute_audio_stats(audio: np.ndarray, sample_rate: int, n_mfcc: int) -> torch.Tensor:
     if audio.size == 0:
         return torch.zeros(n_mfcc * 2, dtype=torch.float32)
@@ -127,6 +139,7 @@ def compute_audio_stats(audio: np.ndarray, sample_rate: int, n_mfcc: int) -> tor
     return torch.cat([mean, std], dim=0)
 
 
+# Extract deep visual features from LipNet's convolutional backbone.
 def extract_visual_embeddings(lipnet: LipNet, frames: torch.Tensor) -> torch.Tensor:
     with torch.no_grad():
         x = F.relu(lipnet.conv1(frames))
@@ -144,6 +157,7 @@ def extract_visual_embeddings(lipnet: LipNet, frames: torch.Tensor) -> torch.Ten
     return x
 
 
+# Manage cached feature computation for both modalities.
 class FeatureExtractor:
     def __init__(self, grid_dataset: GridDataset, lipnet: LipNet, device: torch.device, cfg: DetectorConfig):
         self.grid = grid_dataset
@@ -154,6 +168,7 @@ class FeatureExtractor:
         self.audio_cache: dict = {}
         self.fps_cache: dict = {}
 
+    # Cache-friendly helper for lip feature aggregation.
     def _load_visual_stats(self, video_path: str) -> Tuple[torch.Tensor, float]:
         if video_path in self.visual_cache:
             return self.visual_cache[video_path], self.fps_cache[video_path]
@@ -167,6 +182,7 @@ class FeatureExtractor:
         self.fps_cache[video_path] = fps
         return stats, fps
 
+    # Load raw audio waveform for a video or numpy source and cache it.
     def _load_audio(self, video_path: str) -> Tuple[np.ndarray, int]:
         if video_path in self.audio_cache:
             return self.audio_cache[video_path]
@@ -196,28 +212,36 @@ class FeatureExtractor:
         self.audio_cache[video_path] = (audio, sr)
         return audio, sr
 
+    # Assemble concatenated audio/visual features with optional shifting.
     def build_feature(self, video_path: str, shift_frames: int) -> Tuple[torch.Tensor, dict]:
+        # --- Prepare cached visual features and FPS ---
         visual_stats, fps = self._load_visual_stats(video_path)
         audio, sr = self._load_audio(video_path)
         if sr != self.cfg.sample_rate:
             audio = librosa.resample(audio, orig_sr=sr, target_sr=self.cfg.sample_rate)
             sr = self.cfg.sample_rate
+        # --- Shift audio then compute MFCC statistics ---
         shifted_audio = shift_audio(audio, shift_frames, fps, sr)
         audio_stats = compute_audio_stats(shifted_audio, sr, self.cfg.n_mfcc)
+        # --- Concatenate feature streams ---
         feature = torch.cat([visual_stats, audio_stats], dim=0)
         return feature, {"video_path": video_path, "shift_frames": shift_frames, "fps": fps}
 
 
+# Dataset wrapper that spawns aligned vs. misaligned samples.
 class MisalignmentDataset(Dataset):
+    # Initialize dataset with video paths and augmentation options.
     def __init__(self, video_paths: List[str], extractor: FeatureExtractor, cfg: DetectorConfig, seed: int = 0):
         self.video_paths = video_paths
         self.extractor = extractor
         self.cfg = cfg
         self.rng = random.Random(seed)
 
+    # Report dataset length including negatives.
     def __len__(self) -> int:
         return len(self.video_paths) * (1 + self.cfg.num_negative_samples)
 
+    # Pull a positive or negative feature pair for training.
     def __getitem__(self, idx: int):
         base_idx = idx // (1 + self.cfg.num_negative_samples)
         variant_idx = idx % (1 + self.cfg.num_negative_samples)
@@ -234,6 +258,7 @@ class MisalignmentDataset(Dataset):
         return feature, torch.tensor(label, dtype=torch.float32)
 
 
+# Simple MLP classifier that predicts alignment probability.
 class MisalignmentDetector(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int = 256, dropout: float = 0.3):
         super().__init__()
@@ -246,16 +271,19 @@ class MisalignmentDetector(nn.Module):
             nn.Linear(hidden_dim, 1),
         )
 
+    # Run a batch of features through the classifier.
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.classifier(x).squeeze(-1)
 
 
+# Execute a full pass over a dataloader and compute metrics.
 def run_epoch(model, dataloader, criterion, device, optimizer=None):
     is_train = optimizer is not None
     model.train() if is_train else model.eval()
     total_loss = 0.0
     all_labels, all_probs = [], []
     
+    # --- Iterate over dataloader to accumulate loss/metrics ---
     for features, labels in dataloader:
         features, labels = features.to(device), labels.to(device)
         logits = model(features)
@@ -280,6 +308,7 @@ def run_epoch(model, dataloader, criterion, device, optimizer=None):
     return {"loss": total_loss / len(dataloader.dataset), "acc": acc, "auc": auc, "labels": labels_t, "probs": probs_t}
 
 
+# Plot and persist an ROC curve for detector evaluation.
 def plot_roc(labels: np.ndarray, probs: np.ndarray, out_path: str) -> None:
     if labels.size == 0 or len(np.unique(labels)) < 2:
         return
@@ -296,6 +325,7 @@ def plot_roc(labels: np.ndarray, probs: np.ndarray, out_path: str) -> None:
     plt.close()
 
 
+# Load pretrained LipNet weights for frozen visual feature extraction.
 def load_lipnet(checkpoint_path: str, vocab_size: int, device: torch.device) -> LipNet:
     lipnet = LipNet(vocab_size=vocab_size)
     checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -309,6 +339,7 @@ def load_lipnet(checkpoint_path: str, vocab_size: int, device: torch.device) -> 
     return lipnet
 
 
+# Persist detector weights and config for later reuse.
 def save_detector(model: MisalignmentDetector, path: str, cfg: DetectorConfig) -> None:
     torch.save({
         "model_state_dict": model.state_dict(),
@@ -319,6 +350,7 @@ def save_detector(model: MisalignmentDetector, path: str, cfg: DetectorConfig) -
     print(f"Detector saved to {path}")
 
 
+# Parse CLI options for reproducible experiments.
 def parse_args():
     p = argparse.ArgumentParser(description="Train misalignment detector")
     p.add_argument("--data_path", type=str, default="./data")
@@ -342,6 +374,7 @@ def parse_args():
     return p.parse_args()
 
 
+# Entrypoint for model training and evaluation workflow.
 def main():
     args = parse_args()
     
@@ -369,6 +402,7 @@ def main():
     print(f"Using device: {device}")
     print(f"Logs will be saved to: {log_folder}")
 
+    # --- Initialize run configuration and feature extractor helpers ---
     cfg = DetectorConfig(
         sample_rate=args.sample_rate,
         n_mfcc=args.n_mfcc,
@@ -402,6 +436,7 @@ def main():
     val_ds = MisalignmentDataset(val_paths, extractor, cfg, seed=args.seed + 1)
     test_ds = MisalignmentDataset(test_paths, extractor, cfg, seed=args.seed + 2)
 
+    # --- Build PyTorch dataloaders ---
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size)
     test_loader = DataLoader(test_ds, batch_size=args.batch_size)
@@ -415,6 +450,7 @@ def main():
     logger.log("")
     logger.log("Training started...")
 
+    # --- Training loop with validation tracking ---
     best_state, best_auc = None, -1.0
     for epoch in range(1, args.epochs + 1):
         epoch_start = time.time()

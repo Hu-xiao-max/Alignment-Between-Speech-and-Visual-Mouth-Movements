@@ -1,5 +1,18 @@
 # Alignment-Between-Speech-and-Visual-Mouth-Movements
 
+## Assignment Info
+- Name: Xiao Hu, Yibo Wang, Xinran Tao, Yunpei Gu
+- Class: CS 7180 Advanced Perception
+- Date: 2025-12-07
+- OS Used: Linux
+
+### Build & Run Instructions
+1. Install dependencies: `pip install -r requirements.txt`
+2. (Optional) Download `shape_predictor_68_face_landmarks.dat` as detailed below.
+3. Train LipNet: `./run_train.sh --mode train --epochs 100 --batch_size 8`
+4. Train misalignment detector (example): `python misalignment_detection_train.py --data_path ./data --checkpoint lipnet_final.pth --detector_checkpoint misalignment_detector.pth`
+5. Generate demos: `python misalignment_detection_demo.py --detector_checkpoint misalignment_detector.pth --save_demo_dir demos`
+
 1.Dataset download
 
 https://www.kaggle.com/datasets/jedidiahangekouakou/grid-corpus-dataset-for-training-lipnet/data
@@ -32,6 +45,7 @@ unzip in follow path：Alignment-Between-Speech-and-Visual-Mouth-Movements/data/
 | `lipnet_final.pth` | PyTorch model weights produced by `trainer.py`. |
 | `README.md` | Project overview, setup instructions, and file descriptions (this document). |
 
+<<<<<<< Updated upstream
 ## Install dependencies
   pip install -r requirements.txt
 
@@ -46,6 +60,7 @@ unzip in follow path：Alignment-Between-Speech-and-Visual-Mouth-Movements/data/
 ./run_train.sh  python train.py --mode test --checkpoint checkpoints/lipnet_best.keras
 
   ### single video inference
+
   ./run_train.sh python train.py --mode inference --checkpoint checkpoints/lipnet_best.keras --video ./data/s1_processed/bbaf2n.mpg
 
 ## Misalignment Detection Pipeline
@@ -111,3 +126,4 @@ python misalignment_detection_demo.py \
 | `--demo_scale 2.0` | Upscale factor for video resolution (2.0 = double the size) |
 | `--demo_audio_sample_rate 44100` | Audio sample rate in Hz for the output videos (44100 = CD quality) | -->
 
+Demo vides are available at: https://drive.google.com/drive/folders/1k0D9u-kNgub-5uR0JyHJjFRLJ0quRWTf?usp=drive_link

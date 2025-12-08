@@ -1,3 +1,6 @@
+# Yunpei Gu
+# 2025-11-30
+# CS 7180 Advanced Perception
 """
 Misalignment Detection - Demo Generation Script
 usage: python misalignment_detection_demo.py --save_demo_dir demos --demo_shift_frames 10
@@ -29,12 +32,14 @@ from dataset import GridDataset
 from model import LipNet
 
 
+# Seed python, numpy, and torch RNGs.
 def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
 
 
+# Select an available accelerator or fall back to CPU.
 def get_device() -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda")
@@ -54,6 +59,7 @@ class DetectorConfig:
     default_fps: float = 25.0
 
 
+# Retrieve FPS metadata with a fallback value.
 def get_video_fps(video_path: str, fallback: float = 25.0) -> float:
     if video_path.endswith(".npy"):
         return fallback
@@ -63,6 +69,7 @@ def get_video_fps(video_path: str, fallback: float = 25.0) -> float:
     return fps if fps and fps > 1e-3 else fallback
 
 
+# Shift audio samples to simulate latency relative to video.
 def shift_audio(audio: np.ndarray, shift_frames: int, fps: float, sample_rate: int) -> np.ndarray:
     if shift_frames == 0:
         return audio.copy()
@@ -80,6 +87,7 @@ def shift_audio(audio: np.ndarray, shift_frames: int, fps: float, sample_rate: i
     return result
 
 
+# Produce an audio track with the requested amount of shift.
 def build_demo_audio_track(audio: np.ndarray, shift_frames: int, fps: float, sample_rate: int, duration: float) -> np.ndarray:
     if audio.size == 0:
         return np.zeros(int(duration * sample_rate), dtype=np.float32)
@@ -92,6 +100,7 @@ def build_demo_audio_track(audio: np.ndarray, shift_frames: int, fps: float, sam
     return shifted.astype(np.float32)
 
 
+# Compute MFCC statistics for demo feature extraction.
 def compute_audio_stats(audio: np.ndarray, sample_rate: int, n_mfcc: int) -> torch.Tensor:
     if audio.size == 0:
         return torch.zeros(n_mfcc * 2, dtype=torch.float32)
@@ -103,6 +112,7 @@ def compute_audio_stats(audio: np.ndarray, sample_rate: int, n_mfcc: int) -> tor
     return torch.cat([mfcc_tensor.mean(dim=0), mfcc_tensor.std(dim=0)], dim=0)
 
 
+# Run LipNet convolutions to embed video frames.
 def extract_visual_embeddings(lipnet: LipNet, frames: torch.Tensor) -> torch.Tensor:
     with torch.no_grad():
         x = F.relu(lipnet.conv1(frames))
@@ -119,7 +129,9 @@ def extract_visual_embeddings(lipnet: LipNet, frames: torch.Tensor) -> torch.Ten
     return x
 
 
+# Cache-heavy helper that bundles visual and audio descriptors.
 class FeatureExtractor:
+    # Initialize extractor with dataset references and caches.
     def __init__(self, grid_dataset: GridDataset, lipnet: LipNet, device: torch.device, cfg: DetectorConfig):
         self.grid = grid_dataset
         self.lipnet = lipnet.to(device)
@@ -129,6 +141,7 @@ class FeatureExtractor:
         self.audio_cache: dict = {}
         self.fps_cache: dict = {}
 
+    # Load/calculate visual features while caching FPS data.
     def _load_visual_stats(self, video_path: str) -> Tuple[torch.Tensor, float]:
         if video_path in self.visual_cache:
             return self.visual_cache[video_path], self.fps_cache[video_path]
@@ -140,6 +153,7 @@ class FeatureExtractor:
         self.fps_cache[video_path] = fps
         return stats, fps
 
+    # Load audio samples from disk, using moviepy fallback when needed.
     def _load_audio(self, video_path: str) -> Tuple[np.ndarray, int]:
         if video_path in self.audio_cache:
             return self.audio_cache[video_path]
@@ -167,17 +181,21 @@ class FeatureExtractor:
         self.audio_cache[video_path] = (audio.astype(np.float32), sr)
         return self.audio_cache[video_path]
 
+    # Build concatenated audio-visual feature vector for inference.
     def build_feature(self, video_path: str, shift_frames: int) -> Tuple[torch.Tensor, dict]:
+        # --- Gather cached stats and apply any resampling ---
         visual_stats, fps = self._load_visual_stats(video_path)
         audio, sr = self._load_audio(video_path)
         if sr != self.cfg.sample_rate:
             audio = librosa.resample(audio, orig_sr=sr, target_sr=self.cfg.sample_rate)
             sr = self.cfg.sample_rate
+        # --- Shift audio then compute MFCC stats before concatenation ---
         shifted = shift_audio(audio, shift_frames, fps, sr)
         audio_stats = compute_audio_stats(shifted, sr, self.cfg.n_mfcc)
         return torch.cat([visual_stats, audio_stats], dim=0), {"shift_frames": shift_frames, "fps": fps}
 
 
+# Lightweight classifier that scores alignment probability.
 class MisalignmentDetector(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int = 256, dropout: float = 0.3):
         super().__init__()
@@ -187,10 +205,12 @@ class MisalignmentDetector(nn.Module):
             nn.Linear(input_dim, hidden_dim), nn.ReLU(), nn.Dropout(dropout), nn.Linear(hidden_dim, 1)
         )
 
+    # Return sigmoid-ready logits per sample.
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.classifier(x).squeeze(-1)
 
 
+# Restore LipNet weights for featurization.
 def load_lipnet(path: str, vocab_size: int, device: torch.device) -> LipNet:
     lipnet = LipNet(vocab_size=vocab_size)
     ckpt = torch.load(path, map_location=device)
@@ -201,6 +221,7 @@ def load_lipnet(path: str, vocab_size: int, device: torch.device) -> LipNet:
     return lipnet
 
 
+# Restore misalignment detector checkpoint along with config metadata.
 def load_detector(path: str, device: torch.device) -> Tuple[MisalignmentDetector, dict]:
     ckpt = torch.load(path, map_location=device)
     model = MisalignmentDetector(ckpt["input_dim"], ckpt["hidden_dim"])
@@ -209,12 +230,14 @@ def load_detector(path: str, device: torch.device) -> Tuple[MisalignmentDetector
     return model, ckpt.get("config", {})
 
 
+# Overlay score text information onto a frame.
 def annotate_frame_rgb(frame: np.ndarray, text: str) -> np.ndarray:
     bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     cv2.putText(bgr, text, (10, bgr.shape[0] - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
     return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
 
+# Build a shifted MoviePy audio clip for demo visualization.
 def build_shifted_audio_clip(clip, shift_frames: int, fps: float, sample_rate: int):
     if clip.audio is None or sample_rate <= 0:
         return None
@@ -228,6 +251,7 @@ def build_shifted_audio_clip(clip, shift_frames: int, fps: float, sample_rate: i
     return AudioArrayClip(np.stack(shifted, axis=1).astype(np.float32), fps=orig_sr)
 
 
+# Render and save annotated demo videos using MoviePy utilities.
 def save_demo_with_moviepy(clip, out_path: str, text: str, audio_clip) -> None:
     annotated = clip.fl_image(lambda f: annotate_frame_rgb(f, text))
     if audio_clip is not None:
@@ -238,6 +262,7 @@ def save_demo_with_moviepy(clip, out_path: str, text: str, audio_clip) -> None:
     annotated.close()
 
 
+# Generate aligned/misaligned demos for a particular video path.
 def export_demo(args, extractor: FeatureExtractor, model: MisalignmentDetector, device: torch.device, video_path: str):
     os.makedirs(args.save_demo_dir, exist_ok=True)
 
@@ -257,6 +282,7 @@ def export_demo(args, extractor: FeatureExtractor, model: MisalignmentDetector, 
         print("WARNING: MoviePy not available, cannot generate video demos")
         return
 
+    # --- Prepare base clip with proper scaling ---
     clip = VideoFileClip(video_path)
     if args.demo_scale != 1.0 and vfx:
         clip = clip.fx(vfx.resize, args.demo_scale)
@@ -268,6 +294,7 @@ def export_demo(args, extractor: FeatureExtractor, model: MisalignmentDetector, 
     aligned_audio = clip.audio if args.demo_include_audio else None
     misaligned_audio = build_shifted_audio_clip(clip, args.demo_shift_frames, fps, sr) if args.demo_include_audio else None
 
+    # --- Export aligned and misaligned versions ---
     save_demo_with_moviepy(clip, os.path.join(args.save_demo_dir, "aligned_demo.mp4"), f"aligned | score: {aligned_score:.2f}", aligned_audio)
     save_demo_with_moviepy(clip, os.path.join(args.save_demo_dir, "misaligned_demo.mp4"), f"shift={args.demo_shift_frames} | score: {misaligned_score:.2f}", misaligned_audio)
 
@@ -278,6 +305,7 @@ def export_demo(args, extractor: FeatureExtractor, model: MisalignmentDetector, 
     print(f"Saved demos to {args.save_demo_dir}")
 
 
+# Parse CLI arguments controlling demo generation.
 def parse_args():
     p = argparse.ArgumentParser(description="Generate misalignment demo videos")
     p.add_argument("--data_path", type=str, default="./data")
@@ -298,13 +326,14 @@ def parse_args():
 
 
 
+# Entrypoint for demo creation flow across speakers/videos.
 def main():
     args = parse_args()
     set_seed(args.seed)
     device = get_device()
     print(f"Using device: {device}")
 
-    # Load detector
+    # --- Load trained detector and configuration ---
     model, saved_cfg = load_detector(args.detector_checkpoint, device)
     print(f"Loaded detector from {args.detector_checkpoint}")
 
@@ -314,6 +343,7 @@ def main():
         max_shift_frames=saved_cfg.get("max_shift_frames", 10),
     )
 
+    # --- Prepare dataset index and extractor ---
     speakers = args.speakers or sorted([d for d in os.listdir(args.data_path) if d.startswith("s")])
     base_dataset = GridDataset(args.data_path, speakers, img_width=cfg.img_width, img_height=cfg.img_height, max_video_length=cfg.max_video_length)
 
@@ -360,98 +390,6 @@ def main():
         
         print(f"\n{'='*60}")
         print(f"All demos saved to {args.save_demo_dir}/")
-
-
-# def main():
-#     args = parse_args()
-#     set_seed(args.seed)
-#     device = get_device()
-#     print(f"Using device: {device}")
-
-#     # Load detector
-#     model, saved_cfg = load_detector(args.detector_checkpoint, device)
-#     print(f"Loaded detector from {args.detector_checkpoint}")
-
-#     cfg = DetectorConfig(
-#         sample_rate=saved_cfg.get("sample_rate", 16000),
-#         n_mfcc=saved_cfg.get("n_mfcc", 20),
-#         max_shift_frames=saved_cfg.get("max_shift_frames", 10),
-#     )
-
-#     speakers = args.speakers or sorted([d for d in os.listdir(args.data_path) if d.startswith("s")])
-#     base_dataset = GridDataset(args.data_path, speakers, img_width=cfg.img_width, img_height=cfg.img_height, max_video_length=cfg.max_video_length)
-
-#     lipnet = load_lipnet(args.checkpoint, len(base_dataset.vocab), device)
-#     extractor = FeatureExtractor(base_dataset, lipnet, device, cfg)
-
-#     # 如果指定了单个视频，只处理这个视频
-#     if args.demo_video:
-#         video_path = args.demo_video
-#         export_demo(args, extractor, model, device, video_path)
-#     else:
-#         # 每个speaker随机选一个视频
-#         videos_by_speaker = {}
-#         for video_path, _ in base_dataset.samples:
-#             # 从路径中提取speaker名字，例如 ./data/s1_processed/bbaf2n.mpg -> s1_processed
-#             speaker = os.path.basename(os.path.dirname(video_path))
-#             if speaker not in videos_by_speaker:
-#                 videos_by_speaker[speaker] = []
-#             videos_by_speaker[speaker].append(video_path)
-        
-#         print(f"Found {len(videos_by_speaker)} speakers")
-        
-#         # 每个speaker随机选一个
-#         for speaker, videos in videos_by_speaker.items():
-#             video_path = random.choice(videos)
-#             print(f"\n{'='*60}")
-#             print(f"Processing speaker: {speaker}")
-            
-#             # 为每个speaker创建独立的输出目录
-#             speaker_demo_dir = os.path.join(args.save_demo_dir, speaker)
-#             args_copy = argparse.Namespace(**vars(args))
-#             args_copy.save_demo_dir = speaker_demo_dir
-            
-#             try:
-#                 export_demo(args_copy, extractor, model, device, video_path)
-#             except Exception as e:
-#                 print(f"Error processing {speaker}: {e}")
-#                 continue
-        
-#         print(f"\n{'='*60}")
-#         print(f"All demos saved to {args.save_demo_dir}/")
-
-# def main():
-#     args = parse_args()
-#     set_seed(args.seed)
-#     device = get_device()
-#     print(f"Using device: {device}")
-
-#     # Load detector
-#     model, saved_cfg = load_detector(args.detector_checkpoint, device)
-#     print(f"Loaded detector from {args.detector_checkpoint}")
-
-#     cfg = DetectorConfig(
-#         sample_rate=saved_cfg.get("sample_rate", 16000),
-#         n_mfcc=saved_cfg.get("n_mfcc", 20),
-#         max_shift_frames=saved_cfg.get("max_shift_frames", 10),
-#     )
-
-#     speakers = args.speakers or sorted([d for d in os.listdir(args.data_path) if d.startswith("s")])
-#     base_dataset = GridDataset(args.data_path, speakers, img_width=cfg.img_width, img_height=cfg.img_height, max_video_length=cfg.max_video_length)
-
-#     lipnet = load_lipnet(args.checkpoint, len(base_dataset.vocab), device)
-#     extractor = FeatureExtractor(base_dataset, lipnet, device, cfg)
-
-#     # Get video
-#     if args.demo_video:
-#         video_path = args.demo_video
-#     else:
-#         videos = [v for v, _ in base_dataset.samples]
-#         if not videos:
-#             raise RuntimeError("No videos found")
-#         video_path = random.choice(videos)
-
-#     export_demo(args, extractor, model, device, video_path)
 
 
 if __name__ == "__main__":
