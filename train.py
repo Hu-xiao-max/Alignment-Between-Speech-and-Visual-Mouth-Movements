@@ -1,3 +1,7 @@
+# Xiao Hu, Yibo Wang, Xinran Tao, Yunpei Gu
+# 2025-11-30
+# CS 7180 Advanced Perception
+
 """
 LipNet Training Script - Based on GRID Corpus Dataset
 
